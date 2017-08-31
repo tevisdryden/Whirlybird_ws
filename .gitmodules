@@ -1,9 +1,3 @@
-[submodule "src/whirlybird_controller"]
-	path = src/whirlybird_controller
-	url = https://magiccvs.byu.edu/gitlab/whirlybird/whirlybird_controller.git
-[submodule "src/whirlybird_sim"]
-	path = src/whirlybird_sim
-	url = https://magiccvs.byu.edu/gitlab/whirlybird/whirlybird_sim.git
 [submodule "src/whirlybird_description"]
 	path = src/whirlybird_description
 	url = https://magiccvs.byu.edu/gitlab/whirlybird/whirlybird_description.git
