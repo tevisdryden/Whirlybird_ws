@@ -23,3 +23,11 @@ function ros_huey() {
     env | grep ROS_MASTER_URI
     env | grep ROS_IP
 }
+
+function ros_local() {
+    export ROS_MASTER_URI=http://localhost:11311
+    export ROS_IP=$(hostname -I)
+
+    env | grep ROS_MASTER_URI
+    env | grep ROS_IP
+}
