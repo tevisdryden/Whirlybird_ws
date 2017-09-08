@@ -39,8 +39,8 @@ class WhirlybirdSim():
         rospy.spin()
 
     def command_callback(self, msg):
-        self.command[0] = 100 * msg.left_motor # lab handout parameters expect PWM in range [0,100]
-        self.command[1] = 100 * msg.right_motor
+        self.command[0] = msg.left_motor # lab handout parameters expect PWM in range [0,100]
+        self.command[1] = msg.right_motor
 
     def esc_timer_callback(self, event):
         self.command_esc = self.command
@@ -154,7 +154,8 @@ class WhirlybirdSim():
         cpsi   = np.cos(psi)
 
         ################################################
-        # Implement Dynamics for Accelerations Below   #
+        # Implement Dynamics for Accelerations Here    #
+
 
         ################################################
 
