@@ -117,13 +117,13 @@ class Controller():
         ##################################
 
         # Scale Output
-        l_out = left_force*km
+        l_out = left_force/km
         if(l_out < 0):
             l_out = 0
         elif(l_out > 1.0):
             l_out = 1.0
 
-        r_out = right_force*km
+        r_out = right_force/km
         if(r_out < 0):
             r_out = 0
         elif(r_out > 1.0):
