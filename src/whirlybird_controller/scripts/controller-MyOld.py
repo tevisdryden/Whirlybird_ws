@@ -67,46 +67,35 @@ class Controller():
         self.prev_psi = 0.0
         self.Int_psi = 0.0
 
-        # k values
-        # self.kd_theta = 3.375
-        # self.kp_theta = 6.565
-        self.integral_prev_theta = 0
-        self.integral_prev_psi = 0
-        self.integral_prev_phi = 0
+        # DD-fsg-tdryden-Downloads-Aaron-
+        self.D_theta_p = 0.0
+        self.D_phi_p = 0.0
+        self.D_psi_p = 0.0
+        self.theta_e_p = 0.0
+        self.phi_e_p = 0.0
+        self.psi_e_p = 0.0
 
-        #Calculate Gains
-            #psi is yaw, phi is roll, theta is pitch
+        # Int
+        self.I_theta_p = 0.0
+        self.I_phi_p = 0.0
+        self.I_psi_p = 0.0
 
-        self.tr_theta =   .8
-        self.tr_phi   =  .2
-        self.tr_psi   =   self.tr_phi*5.5
-        self.kd_theta =  ((2.2 / self.tr_theta)*2*.707) / 1.152 #1.929
-        self.kp_theta =  (2.2 / self.tr_theta)**2 / 1.152  #2.143
-        self.kd_phi   =  ((2.2 / self.tr_phi)*2*1.1) * Jx #0.048736
-        self.kp_phi   =  (2.2 / self.tr_phi)**2 * Jx #0.252756
-        self.ki_phi   = 0.0
-        self.ki_psi   = .4
-        self.ki_theta = 1.5
+        # Integrators
+        self.ki_theta = 0.4
+        self.ki_phi = 0.5
+        self.ki_psi = 0.0
 
-        b = (l1*(m1*l1 - m2*l2) * (g/l1))/((m1*(l1**2))+(m2*(l2**2))+Jz)
-        self.kd_psi   = ((2.2 / self.tr_psi)*2*2) / b
-        self.kp_psi   = (2.2 / self.tr_psi)**2 / b
+        # self.ki_theta = .5
+        # self.ki_phi = 0.5
+        # self.ki_psi = 0.5
 
-        print("Rise Time Theta ", self.tr_theta)
-        print("Kp Theta ", self.kp_theta)
-        print("Kd Theta ", self.kd_theta)
-        print("Ki Theta ", self.ki_theta)
-        print("Rise Time Phi ", self.tr_phi)
-        print("Kp Phi ", self.kp_phi)
-        print("Kd Phi ", self.kd_phi)
-        print("Ki Phi ", self.ki_phi)
-        print("Rise Time Psi ", self.tr_psi)
-        print("Kp Psi ", self.kp_psi)
-        print("Kd Psi ", self.kd_psi)
-        print("Ki Psi ", self.ki_psi)
-
-
-
+    	# k values
+    	# self.kd = 3.375;
+    	# self.kp = 6.565;
+        self.kd = 1.929 / .707 * 1.2;
+    	self.kp = 2.143;
+        self.kpInner = .252756
+        self.kdInner = .048736
 
         self.prev_time = rospy.Time.now()
 
@@ -152,67 +141,81 @@ class Controller():
         dt = (now-self.prev_time).to_sec()
         self.prev_time = now
 
+    	# Calculate theta dot
+        sig = .05
+        beta = (2 * sig - dt)/(2 * sig + dt)
+    	self.D_theta = (theta - self.prev_theta)/dt;
+        theta_e = self.theta_r - theta;
+        #D_theta_ = beta * self.D_theta_p + (1 - beta)/dt * (theta_e - self.theta_e_p);
+        I_theta_ = self.I_theta_p + dt / 2 * (theta_e + self.theta_e_p)
+        thing = abs((theta_e - self.theta_e_p)/dt)
+        if (thing > .5):
+            I_theta = 0;
+        self.I_theta_p = I_theta_;
+        print(thing, " ",theta_e," ", I_theta_)
+        self.theta_e_p = theta_e;
+    	self.prev_theta = theta;
+        self.D_theta_p = self.D_theta_;
+        self.D_phi_ = (phi - self.prev_phi)/dt;
 
-        ##########################################
+        self.D_psi_ = (psi - self.prev_psi)/dt;
+        psi_e = self.psi_r - psi;
+        #D_psi_ = beta * self.D_psi_p + (1 - beta)/dt * (psi_e - self.psi_e_p);
+        I_psi_ = self.I_psi_p + dt / 2 * (psi_e - self.psi_e_p)
+        thing2 = abs((psi_e - self.psi_e_p)/dt)
+        if (thing2 > .5):
+            I_psi_ = 0;
+        self.I_psi_p = I_psi_;
+        self.psi_e_p = psi_e;
+        self.D_psi_p = self.D_psi_;
+
+        ##################################
         # Implement your controller here
-        sigma = .05
 
-        self.D_theta = (theta - self.prev_theta)/dt
-        Fe = (m1*l1 - m2*l2) * (g/l1) * np.cos(theta)
+    	Fe = (m1 * l1 - m2 * l2) * g / l1 * np.cos(theta);
 
-        error_theta = self.theta_r-theta
-        error_prev_theta = self.theta_r-self.prev_theta
-        integral_theta = ((error_theta+error_prev_theta)/2.0)*dt + self.integral_prev_theta
-        if abs((error_theta-error_prev_theta)/dt) > 1:
-            integral_theta = 0
+        b = (l1 * Fe/(m1 * l1**2 + m2 * l2**2 + Jz))
+        kpOuter = (2.2 / 3)**2 / b
+        kdOuter = 2.2 / 3 * 2 * .707 / b
 
-        Ftil = (self.kp_theta * (self.theta_r - theta)) - (self.kd_theta*self.D_theta) + (self.ki_theta * integral_theta)
+    	FTild = self.kp * (self.theta_r - theta) - self.kd * self.D_theta + I_theta_ * self.ki_theta;
 
-        self.integral_prev_theta = integral_theta
-        self.prev_theta = theta
-        F = Fe + Ftil
+        phiC = (self.psi_r - psi) * kpOuter - kdOuter * self.D_psi_;
 
-        error_psi = self.psi_r-psi
-        error_prev_psi = self.psi_r-self.prev_psi
-        self.D_psi = (psi - self.prev_psi)/dt
-        integral_psi = ((error_psi+error_prev_psi)/2.0)*dt + self.integral_prev_psi
-        if abs((error_psi - error_prev_psi)/dt) > 1:
-            integral_psi = 0
+        phi_e = phiC - phi;
+        I_phi_ = self.I_phi_p + dt / 2 * (phi_e - self.phi_e_p);
+        self.I_phi_p = I_phi_; + I_theta_ * self.ki_theta
+        self.phi_e_p = phi_e;
+        #D_phi_ = beta * self.D_phi_p + (1 - beta)/dt * (phi_e - self.phi_e_p);
+        self.D_phi_p = self.D_phi_;
 
-        phi_r = (self.kp_psi * (self.psi_r - psi)) - (self.kd_psi*self.D_psi) + (self.ki_psi*integral_psi)
+        tau = (phiC - phi) * self.kpInner - self.kdInner * self.D_phi_  + I_psi_ * self.ki_phi;
+        self.D_psi_ = (psi - self.prev_psi)/dt;
+        self.prev_phi = phi;
+        self.prev_psi = psi;
 
-        self.integral_prev_psi = integral_psi
-        self.prev_psi = psi
+    	F = Fe + FTild;
 
-        error_phi = phi_r-phi
-        error_prev_phi = phi_r-self.prev_phi
-        self.D_phi = (phi - self.prev_phi)/dt
-        integral_phi = ((error_phi+error_prev_phi)/2.0)*dt + self.integral_prev_phi
-        if abs((error_phi-error_prev_phi)/dt) > .5:
-            integral_phi = 0
+    	left_force = F/2 + tau/(2*d);
 
-        tau = (self.kp_phi * (phi_r - phi)) - (self.kd_phi*self.D_phi) + (self.ki_phi*integral_phi)
+    	right_force = F/2 - tau/(2*d);
 
-        self.integral_prev_phi = integral_phi
-        self.prev_phi = phi
 
-        left_force = F/2 + tau/(2*d)
-        right_force = F/2 - tau/(2*d)
 
-        ###########################################
+        ########################self.D_psi_ = (psi - self.prev_psi)/dt;##########
 
         # Scale Output
         l_out = left_force/km
         if(l_out < 0):
             l_out = 0
-        elif(l_out > 0.6):
-            l_out = 0.6
+        elif(l_out > .7):
+            l_out = .7
 
         r_out = right_force/km
         if(r_out < 0):
             r_out = 0
-        elif(r_out > 0.6):
-            r_out = 0.6
+        elif(r_out > .7):
+            r_out = .7
 
         # Pack up and send command
         command = Command()
@@ -223,9 +226,8 @@ class Controller():
 
 if __name__ == '__main__':
     rospy.init_node('controller', anonymous=True)
-    controller = Controller()
-    # try:
-    #
-    # except:
-    #     rospy.ROSInterruptException
-    # pass
+    try:
+        controller = Controller()
+    except:
+        rospy.ROSInterruptException
+    pass
