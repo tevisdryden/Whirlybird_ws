@@ -13,6 +13,10 @@
 import rospy
 import time
 import numpy as np
+from numpy import matrix, linalg
+from math import sin, cos
+import control
+from control import place
 from whirlybird_msgs.msg import Command
 from whirlybird_msgs.msg import Whirlybird
 from std_msgs.msg import Float32
@@ -152,54 +156,102 @@ class Controller():
         dt = (now-self.prev_time).to_sec()
         self.prev_time = now
 
-
-        ##########################################
-        # Implement your controller here
-        sigma = .05
-
         self.D_theta = (theta - self.prev_theta)/dt
-        Fe = (m1*l1 - m2*l2) * (g/l1) * np.cos(theta)
-
-        error_theta = self.theta_r-theta
-        error_prev_theta = self.theta_r-self.prev_theta
-        integral_theta = ((error_theta+error_prev_theta)/2.0)*dt + self.integral_prev_theta
-        if abs((error_theta-error_prev_theta)/dt) > 1:
-            integral_theta = 0
-
-        Ftil = (self.kp_theta * (self.theta_r - theta)) - (self.kd_theta*self.D_theta) + (self.ki_theta * integral_theta)
-
-        self.integral_prev_theta = integral_theta
         self.prev_theta = theta
-        F = Fe + Ftil
 
-        error_psi = self.psi_r-psi
-        error_prev_psi = self.psi_r-self.prev_psi
         self.D_psi = (psi - self.prev_psi)/dt
-        integral_psi = ((error_psi+error_prev_psi)/2.0)*dt + self.integral_prev_psi
-        if abs((error_psi - error_prev_psi)/dt) > 1:
-            integral_psi = 0
-
-        phi_r = (self.kp_psi * (self.psi_r - psi)) - (self.kd_psi*self.D_psi) + (self.ki_psi*integral_psi)
-
-        self.integral_prev_psi = integral_psi
         self.prev_psi = psi
 
-        error_phi = phi_r-phi
-        error_prev_phi = phi_r-self.prev_phi
         self.D_phi = (phi - self.prev_phi)/dt
-        integral_phi = ((error_phi+error_prev_phi)/2.0)*dt + self.integral_prev_phi
-        if abs((error_phi-error_prev_phi)/dt) > .5:
-            integral_phi = 0
-
-        tau = (self.kp_phi * (phi_r - phi)) - (self.kd_phi*self.D_phi) + (self.ki_phi*integral_phi)
-
-        self.integral_prev_phi = integral_phi
         self.prev_phi = phi
+
+        Fe = (m1*l1 - m2*l2) * (g/l1)
+
+        ##########################################
+        # Implement your SS controller here
+        val = l1 * Fe / (m1 * l1**2 + m2 * l2**2 + Jz)
+        A_lat = matrix([[0,0,1,0],[0,0,0,1],[0,0,0,0],[val,0,0,0]])
+        B_lat = matrix([[0],[0],[1 / Jx],[0]])
+        C_lat = matrix([[1,0,0,0],[0,1,0,0]])
+
+        theta_e = 0;
+
+        val2 = (m1 * l1 - m2 * l2) * g * sin(theta_e) / (m1 * l1**2 + m2 * l2**2 + Jy)
+        A_lon = matrix([[0,1],[val2,0]])
+        val3 = l1 / (m1 * l1**2 + m2 * l2**2 + Jy)
+        B_lon = matrix([[0],[val3]])
+        C_lon = matrix([[1,0]])
+
+        zeta_psi = .707;
+        zeta_phi = .707;
+        wn_psi = 2.2/self.tr_psi
+        wn_phi = 2.2/self.tr_phi
+        desired_poles = np.roots(np.convolve([1, 2*zeta_phi*wn_phi,wn_phi**2],[1, 2*zeta_psi*wn_psi,wn_psi**2]))
+        K_lat = place(A_lat,B_lat,desired_poles)
+        Kr_lat = -1/(C_lat[1]*linalg.inv(A_lat-B_lat*K_lat)*B_lat)
+        x_lat = matrix([[phi],[psi],[self.D_phi],[self.D_psi]])
+
+        zeta_theta = .707
+        wn_theta = 2.2/self.tr_theta
+        desired_poles_lon = np.roots([1, 2*zeta_theta*wn_theta,wn_theta**2])
+        K_lon = place(A_lon,B_lon,desired_poles_lon)
+        Kr_lon = -1/(C_lon*linalg.inv(A_lon-B_lon*K_lon)*B_lon)
+        x_lon = matrix([[theta],[self.D_theta]])
+
+        Ftil = -K_lon*x_lon + Kr_lon*self.theta_r
+        F = Fe + Ftil
+
+        tau = -K_lat*x_lat + Kr_lat*self.psi_r
 
         left_force = F/2 + tau/(2*d)
         right_force = F/2 - tau/(2*d)
-
-        ###########################################
+        # ##########################################
+        # # Implement your controller here
+        # sigma = .05
+        #
+        # self.D_theta = (theta - self.prev_theta)/dt
+        # Fe = (m1*l1 - m2*l2) * (g/l1) * np.cos(theta)
+        #
+        # error_theta = self.theta_r-theta
+        # error_prev_theta = self.theta_r-self.prev_theta
+        # integral_theta = ((error_theta+error_prev_theta)/2.0)*dt + self.integral_prev_theta
+        # if abs((error_theta-error_prev_theta)/dt) > 1:
+        #     integral_theta = 0
+        #
+        # Ftil = (self.kp_theta * (self.theta_r - theta)) - (self.kd_theta*self.D_theta) + (self.ki_theta * integral_theta)
+        #
+        # self.integral_prev_theta = integral_theta
+        # self.prev_theta = theta
+        # F = Fe + Ftil
+        #
+        # error_psi = self.psi_r-psi
+        # error_prev_psi = self.psi_r-self.prev_psi
+        # self.D_psi = (psi - self.prev_psi)/dt
+        # integral_psi = ((error_psi+error_prev_psi)/2.0)*dt + self.integral_prev_psi
+        # if abs((error_psi - error_prev_psi)/dt) > 1:
+        #     integral_psi = 0
+        #
+        # phi_r = (self.kp_psi * (self.psi_r - psi)) - (self.kd_psi*self.D_psi) + (self.ki_psi*integral_psi)
+        #
+        # self.integral_prev_psi = integral_psi
+        # self.prev_psi = psi
+        #
+        # error_phi = phi_r-phi
+        # error_prev_phi = phi_r-self.prev_phi
+        # self.D_phi = (phi - self.prev_phi)/dt
+        # integral_phi = ((error_phi+error_prev_phi)/2.0)*dt + self.integral_prev_phi
+        # if abs((error_phi-error_prev_phi)/dt) > .5:
+        #     integral_phi = 0
+        #
+        # tau = (self.kp_phi * (phi_r - phi)) - (self.kd_phi*self.D_phi) + (self.ki_phi*integral_phi)
+        #
+        # self.integral_prev_phi = integral_phi
+        # self.prev_phi = phi
+        #
+        # left_force = F/2 + tau/(2*d)
+        # right_force = F/2 - tau/(2*d)
+        #
+        # ###########################################
 
         # Scale Output
         l_out = left_force/km
